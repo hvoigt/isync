@@ -782,6 +782,7 @@ static int
 prepare_read( conn_t *sock, char **buf, uint *len )
 {
 	uint n = sock->offset + sock->bytes;
+	fprintf(stderr, "prepare read on top of %u at %u\n", sock->bytes, sock->offset);
 	if (!(*len = sizeof(sock->buf) - n)) {
 		error( "Socket error: receive buffer full. Probably protocol error.\n" );
 		socket_fail( sock );
@@ -825,6 +826,8 @@ socket_filled( conn_t *conn, uint len )
 {
 	uint off = conn->offset;
 	uint cnt = conn->bytes + len;
+	fprintf(stderr, "  notifying about read of %u on top of %u at %u, wanted %u, rd sz %u\n",
+	        len, conn->bytes, off, conn->wanted, conn->readsz);
 	conn->bytes = cnt;
 	if (conn->wanted) {
 		// Fulfill as much of the request as still fits into the buffer,
@@ -833,18 +836,23 @@ socket_filled( conn_t *conn, uint len )
 			return;
 	} else {
 		// Need a full line
+		fprintf(stderr, "  want line, scan off %u\n", conn->scanoff);
 		char *s = conn->buf + off;
 		char *p = memchr( s + conn->scanoff, '\n', cnt - conn->scanoff );
 		if (!p) {
 			conn->scanoff = cnt;
+			fprintf(stderr, "    no line yet\n");
 			if (off && off + cnt >= sizeof(conn->buf) - conn->readsz) {
+				fprintf(stderr, "      shifting down\n");
 				memmove( conn->buf, conn->buf + off, cnt );
 				conn->offset = 0;
 			}
 			return;
 		}
 		conn->scanoff = (uint)(p - s);
+		fprintf(stderr, "    line ends at %u\n", conn->scanoff);
 	}
+	fprintf(stderr, "  invoking read callback\n");
 	conn->read_callback( conn->callback_aux );
 }
 
@@ -862,6 +870,8 @@ socket_fill_z( conn_t *sock )
 	sock->in_z->avail_out = len;
 	sock->in_z->next_out = (unsigned char *)buf;
 
+	fprintf(stderr, "socket fill, avail in %u, avail out %u\n",
+	        sock->in_z->avail_in, sock->in_z->avail_out);
 	ret = inflate( sock->in_z, Z_SYNC_FLUSH );
 	/* Z_BUF_ERROR happens here when the previous call both consumed
 	 * all input and exactly filled up the output buffer. */
@@ -870,6 +880,8 @@ socket_fill_z( conn_t *sock )
 		socket_fail( sock );
 		return;
 	}
+	fprintf(stderr, "  now avail in %u, avail out %u\n",
+	        sock->in_z->avail_in, sock->in_z->avail_out);
 
 	if (!sock->in_z->avail_out)
 		conf_wakeup( &sock->z_fake, 0 );
@@ -913,6 +925,7 @@ socket_fill( conn_t *sock )
 			if (sock->readsz > sizeof(sock->buf))
 				sock->readsz = sizeof(sock->buf);
 		}
+		fprintf(stderr, "  read %d of %u intended, rd sz now %u\n", n, len, sock->readsz);
 
 		socket_filled( sock, (uint)n );
 	}
@@ -939,10 +952,13 @@ socket_expect_bytes( conn_t *conn, uint len )
 {
 	conn->wanted = len;
 	uint off = conn->offset;
+	fprintf(stderr, "  want read of %u, offset %u\n", len, off);
 	if (off) {
 		uint cnt = conn->bytes;
+		fprintf(stderr, "    already have %u\n", cnt);
 		if (off + len > sizeof(conn->buf) ||
 		    off + cnt >= sizeof(conn->buf) - conn->readsz) {
+			fprintf(stderr, "      shifting down\n");
 			memmove( conn->buf, conn->buf + off, cnt );
 			conn->offset = 0;
 		}
@@ -958,7 +974,9 @@ socket_read( conn_t *conn, uint min_len, uint max_len, uint *out_len )
 
 	uint off = conn->offset;
 	uint cnt = conn->bytes;
+	fprintf(stderr, "  socket read min %u, max %u, have %u at %u\n", min_len, max_len, cnt, off);
 	if (cnt < min_len) {
+		fprintf(stderr, "    not enough buffered\n");
 		if (conn->state == SCK_EOF)
 			return (void *)~0;
 		return NULL;
@@ -968,6 +986,7 @@ socket_read( conn_t *conn, uint min_len, uint max_len, uint *out_len )
 	conn->offset = cnt ? off + n : 0;
 	conn->bytes = cnt;
 	*out_len = n;
+	fprintf(stderr, "    read %u, %u at %u remain\n", n, cnt, conn->offset);
 	return conn->buf + off;
 }
 
@@ -977,8 +996,10 @@ socket_read_line( conn_t *conn )
 	uint off = conn->offset;
 	uint cnt = conn->bytes;
 	char *s = conn->buf + off;
+	fprintf(stderr, "  socket read line, have %u at %u, scan off %u\n", cnt, off, conn->scanoff);
 	char *p = memchr( s + conn->scanoff, '\n', cnt - conn->scanoff );
 	if (!p) {
+		fprintf(stderr, "    no line yet\n");
 		if (conn->state == SCK_EOF)
 			return (void *)~0;
 		conn->scanoff = cnt;
@@ -992,6 +1013,7 @@ socket_read_line( conn_t *conn )
 	if (p != s && p[-1] == '\r')
 		p--;
 	*p = 0;
+	fprintf(stderr, "    read %u, %u at %u remain\n", n, cnt, conn->offset);
 	return s;
 }
 
@@ -1035,12 +1057,16 @@ do_queued_write( conn_t *conn )
 {
 	buff_chunk_t *bc;
 
+	fprintf(stderr, "  queued write\n");
 	if (!conn->write_buf)
+{		fprintf(stderr, "    nothing there\n");
 		return 0;
+}
 
 	while ((bc = conn->write_buf)) {
 		int n;
 		uint len = bc->len - conn->write_offset;
+		fprintf(stderr, "    writing %u\n", len);
 		if ((n = do_write( conn, bc->data + conn->write_offset, len )) < 0)
 			return -1;
 		if (n != (int)len) {
@@ -1054,6 +1080,7 @@ do_queued_write( conn_t *conn )
 	if (conn->ssl && SSL_pending( conn->ssl ))
 		conf_wakeup( &conn->ssl_fake, 0 );
 #endif
+	fprintf(stderr, "    all written, calling back\n");
 	conn->write_callback( conn->callback_aux );
 	return -1;
 }
@@ -1065,6 +1092,7 @@ do_append( conn_t *conn, buff_chunk_t *bc )
 	conn->buffer_mem += bc->len;
 	*conn->write_buf_append = bc;
 	conn->write_buf_append = &bc->next;
+	fprintf(stderr, "  appending %u\n", bc->len);
 }
 
 /* This is big enough to avoid excessive chunking, but is
@@ -1075,11 +1103,14 @@ static void
 do_flush( conn_t *conn )
 {
 	buff_chunk_t *bc = conn->append_buf;
+	fprintf(stderr, "  do_flush\n");
 #ifdef HAVE_LIBZ
 	if (conn->out_z) {
 		uint buf_avail = conn->append_avail;
 		if (!conn->z_written)
+{			fprintf(stderr, "    nothing to flush\n");
 			return;
+}
 		do {
 			int ret;
 			if (!bc) {
@@ -1091,6 +1122,8 @@ do_flush( conn_t *conn )
 			conn->out_z->avail_in = 0;
 			conn->out_z->next_out = (uchar *)bc->data + bc->len;
 			conn->out_z->avail_out = buf_avail;
+			fprintf(stderr, "    pre-deflate: avail in %u, avail out %u\n",
+			        conn->out_z->avail_in, conn->out_z->avail_out);
 			/* Z_BUF_ERROR cannot happen here, as zlib suppresses the error
 			 * both upon increasing the flush level (1st iteration) and upon
 			 * a no-op after the output buffer was full (later iterations). */
@@ -1098,6 +1131,8 @@ do_flush( conn_t *conn )
 				error( "Fatal: Compression error: %s\n", z_err_msg( ret, conn->out_z ) );
 				abort();
 			}
+			fprintf(stderr, "    post-deflate: avail in %u, avail out %u\n",
+			        conn->out_z->avail_in, conn->out_z->avail_out);
 			bc->len = (uint)((char *)conn->out_z->next_out - bc->data);
 			if (bc->len) {
 				do_append( conn, bc );
@@ -1130,6 +1165,7 @@ socket_write( conn_t *conn, conn_iovec_t *iov, int iovcnt )
 
 	for (i = 0; i < iovcnt; i++)
 		total += iov[i].len;
+	fprintf(stderr, "write %u bytes in %d chunks\n", total, iovcnt);
 	if (total >= WRITE_CHUNK_SIZE) {
 		/* If the new data is too big, queue the pending buffer to avoid latency. */
 		do_flush( conn );
@@ -1154,6 +1190,7 @@ socket_write( conn_t *conn, conn_iovec_t *iov, int iovcnt )
 			buf_avail = WRITE_CHUNK_SIZE - bc->len;
 #endif
 		}
+		fprintf(stderr, "  buffer with %u filled, %u available\n", bc->len, buf_avail);
 		while (total) {
 			len = iov->len - offset;
 #ifdef HAVE_LIBZ
@@ -1163,12 +1200,16 @@ socket_write( conn_t *conn, conn_iovec_t *iov, int iovcnt )
 				conn->out_z->avail_in = len;
 				conn->out_z->next_out = (uchar *)bc->data + bc->len;
 				conn->out_z->avail_out = buf_avail;
+				fprintf(stderr, "    pre-deflate: avail in %u, avail out %u\n",
+				        conn->out_z->avail_in, conn->out_z->avail_out);
 				/* Z_BUF_ERROR is impossible here, as the input buffer always has data,
 				 * and the output buffer always has space. */
 				if ((ret = deflate( conn->out_z, Z_NO_FLUSH )) != Z_OK) {
 					error( "Fatal: Compression error: %s\n", z_err_msg( ret, conn->out_z ) );
 					abort();
 				}
+				fprintf(stderr, "    post-deflate: avail in %u, avail out %u\n",
+				        conn->out_z->avail_in, conn->out_z->avail_out);
 				bc->len = (uint)((char *)conn->out_z->next_out - bc->data);
 				buf_avail = conn->out_z->avail_out;
 				len -= conn->out_z->avail_in;
@@ -1184,6 +1225,8 @@ socket_write( conn_t *conn, conn_iovec_t *iov, int iovcnt )
 			}
 			offset += len;
 			total -= len;
+			fprintf(stderr, "  buffered %u, buffer len %u, %u buffer remain, offset %u, %u total remain\n",
+			       len, bc->len, buf_avail, offset, total);
 			if (offset == iov->len) {
 				if (iov->takeOwn == GiveOwn)
 					free( iov->buf );
@@ -1264,6 +1307,8 @@ socket_fake_cb( void *aux )
 {
 	conn_t *conn = (conn_t *)aux;
 
+	fprintf(stderr, "  fake activity, %s writing\n",
+	        (notifier_config( &conn->notify ) & POLLOUT) ? "already" : "not yet");
 	/* Ensure that a pending write gets queued. */
 	do_flush( conn );
 	/* If no writes are ongoing, start writing now. */
@@ -1293,6 +1338,7 @@ z_fake_cb( void *aux )
 {
 	conn_t *conn = (conn_t *)aux;
 
+	fprintf(stderr, "  fake zlib activity\n");
 	socket_fill_z( conn );
 }
 #endif
