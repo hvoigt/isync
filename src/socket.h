@@ -97,9 +97,9 @@ typedef struct {
 	uint scanoff; /* offset to continue scanning for newline at, relative to 'offset' */
 	uint wanted;  // try to accumulate that many bytes before calling back; 0 => full line
 	uint readsz;  // average size of bulk reads from the underlying socket, times 1.5
-	char buf[100000];
+	char buf[2000];
 #ifdef HAVE_LIBZ
-	char z_buf[100000];
+	char z_buf[2000];
 #endif
 } conn_t;
 
