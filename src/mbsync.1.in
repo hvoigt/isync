@@ -786,6 +786,15 @@ absolute limit, as even a single message can consume more memory than
 this.
 (Default: \fI10M\fR)
 .
+.SS Dynamic Configuration
+.TP
+\fBIncludeCmd\fR \fIcommand\fR
+Specify a shell command to obtain configuration file content from.
+The command is run in the configuration file's containing directory.
+This keyword can appear anywhere.
+The command's output will be interpreted as if it appeared inline;
+it can range from nothing at all to multiple sections.
+.
 .SH CONSOLE OUTPUT
 If \fBmbsync\fR's output is connected to a console, it will print progress
 counters by default. The output will look like this:

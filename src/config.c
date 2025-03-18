@@ -61,12 +61,21 @@ expand_strdup( const char *s, const conffile_t *cfile )
 	}
 }
 
+static void
+conf_print_loc( const conffile_t *cfile )
+{
+	if (cfile->eval_fp)
+		fprintf( stderr, "%s:%d:included:%d: ", cfile->file, cfile->line, cfile->eval_line );
+	else
+		fprintf( stderr, "%s:%d: ", cfile->file, cfile->line );
+}
+
 void
 conf_error( conffile_t *cfile, const char *fmt, ... )
 {
 	va_list va;
 
-	fprintf( stderr, "%s:%d: ", cfile->file, cfile->line );
+	conf_print_loc( cfile );
 	va_start( va, fmt );
 	vfprintf( stderr, fmt, va );
 	va_end( va );
@@ -79,7 +88,7 @@ conf_sys_error( conffile_t *cfile, const char *fmt, ... )
 	va_list va;
 
 	int errno_bak = errno;
-	fprintf( stderr, "%s:%d: ", cfile->file, cfile->line );
+	conf_print_loc( cfile );
 	errno = errno_bak;
 	va_start( va, fmt );
 	vsys_error( fmt, va );
@@ -318,16 +327,78 @@ getopt_helper( conffile_t *cfile, int *cops, channel_conf_t *conf )
 	return 1;
 }
 
+static void
+eval_cmd_popen( conffile_t *cfile, const char *cmd )
+{
+	char *cd_cmd = xasprintf( "cd '%.*'s'; %s", cfile->path_len, cfile->file, cmd );
+
+	if (!(cfile->eval_fp = popen( cd_cmd, "r" ))) {
+		sys_error( "popen" );
+		cfile->err = 1;
+	} else {
+		cfile->eval_line = 0;
+		cfile->eval_command = nfstrdup( cmd );
+	}
+
+	free( cd_cmd );
+}
+
+static void
+eval_cmd_pclose( conffile_t *cfile )
+{
+	int ret = pclose( cfile->eval_fp );
+
+	// Do this here, so the exit code is not attributed to nested lines.
+	cfile->eval_fp = NULL;
+
+	if (ret) {
+		if (ret < 0) {
+			sys_error( "pclose" );
+			cfile->err = 1;
+		} else if (WIFSIGNALED( ret )) {
+			conf_error( cfile, "command \"%s\" crashed with signal %d\n",
+			            cfile->eval_command, WTERMSIG( ret ) );
+		} else {
+			conf_error( cfile, "command \"%s\" exited with status %d\n",
+			            cfile->eval_command, WEXITSTATUS( ret ) );
+		}
+	}
+
+	free( cfile->eval_command );
+	cfile->eval_command = NULL;
+}
+
+static int
+read_cline( conffile_t *cfile )
+{
+	if (cfile->eval_fp) {
+		cfile->eval_line++;
+		if ((cfile->rest = fgets( cfile->buf, cfile->bufl, cfile->eval_fp )) != NULL)
+			return 1;
+		eval_cmd_pclose( cfile );
+	}
+	cfile->line++;
+	return (cfile->rest = fgets( cfile->buf, cfile->bufl, cfile->fp )) != NULL;
+}
+
+static int
+check_excess_tokens( conffile_t *cfile )
+{
+	if (cfile->rest) {
+		char *arg = get_arg( cfile, ARG_OPTIONAL, NULL );
+		if (arg) {
+			conf_error( cfile, "excess token '%s'\n", arg );
+			return 1;
+		}
+	}
+	return 0;
+}
+
 int
 getcline( conffile_t *cfile )
 {
-	char *arg;
-
-	if (cfile->rest && (arg = get_arg( cfile, ARG_OPTIONAL, NULL )))
-		conf_error( cfile, "excess token '%s'\n", arg );
-	while (fgets( cfile->buf, cfile->bufl, cfile->fp )) {
-		cfile->line++;
-		cfile->rest = cfile->buf;
+	check_excess_tokens( cfile );
+	while (read_cline( cfile )) {
 		int comment = 0;
 		if (!(cfile->cmd = get_arg( cfile, ARG_OPTIONAL, &comment ))) {
 			if (comment)
@@ -336,6 +407,13 @@ getcline( conffile_t *cfile )
 		}
 		if (!(cfile->val = get_arg( cfile, ARG_REQUIRED, NULL )))
 			continue;
+		if (!strcasecmp( cfile->cmd, "IncludeCmd" )) {
+			if (cfile->eval_fp)
+				conf_error( cfile, "nested IncludeCmd\n" );
+			else if (!check_excess_tokens( cfile ))
+				eval_cmd_popen( cfile, cfile->val );
+			continue;
+		}
 		return 1;
 	}
 	return 0;
@@ -488,6 +566,7 @@ load_config( const char *where )
 		return 1;
 	}
 	buf[sizeof(buf) - 1] = 0;
+	cfile.eval_fp = NULL;
 	cfile.buf = buf;
 	cfile.bufl = sizeof(buf) - 1;
 	cfile.line = 0;
@@ -495,6 +574,7 @@ load_config( const char *where )
 	cfile.ms_warn = 0;
 	cfile.renew_warn = 0;
 	cfile.delete_warn = 0;
+	cfile.cmd = NULL;
 	cfile.rest = NULL;
 
 	gcops = 0;

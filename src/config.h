@@ -12,10 +12,13 @@
 
 typedef struct {
 	const char *file;
+	char *eval_command;
 	FILE *fp;
+	FILE *eval_fp;
 	char *buf;
 	int bufl;
 	int line;
+	int eval_line;
 	int err;
 	int ms_warn, renew_warn, delete_warn;
 	int path_len;

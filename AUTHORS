@@ -61,6 +61,9 @@ Oliver Runge <oliver.runge@gmail.com>
 Georgy Kibardin <georgy@kibardin.name>
 - Support for UTF-7 IMAP mailbox names
 
+Michiel van den Heuvel <michielvdnheuvel@gmail.com>
+- IncludeCmd option
+
 Honorary Contributors
 =====================
 
