@@ -83,15 +83,13 @@ parse_generic_store( store_conf_t *store, conffile_t *cfg, const char *type )
 		const char *p;
 		for (p = cfg->val; *p; p++) {
 			if (*p == '/') {
-				error( "%s:%d: flattened hierarchy delimiter cannot contain the canonical delimiter '/'\n", cfg->file, cfg->line );
-				cfg->err = 1;
+				conf_error( cfg, "flattened hierarchy delimiter cannot contain the canonical delimiter '/'\n" );
 				return;
 			}
 		}
 		store->flat_delim = nfstrdup( cfg->val );
 	} else {
-		error( "%s:%d: keyword '%s' is not recognized in %s sections\n", cfg->file, cfg->line, cfg->cmd, type );
+		conf_error( cfg, "keyword '%s' is not recognized in %s sections\n", cfg->cmd, type );
 		cfg->rest = NULL;
-		cfg->err = 1;
 	}
 }

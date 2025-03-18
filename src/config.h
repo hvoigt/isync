@@ -27,6 +27,9 @@ extern char FieldDelimiter;
 #define ARG_OPTIONAL 0
 #define ARG_REQUIRED 1
 
+void ATTR_PRINTFLIKE(2, 3) conf_error( conffile_t *cfile, const char *fmt, ... );
+void ATTR_PRINTFLIKE(2, 3) conf_sys_error( conffile_t *cfile, const char *fmt, ... );
+
 char *expand_strdup( const char *s, const conffile_t *cfile );
 
 char *get_arg( conffile_t *cfile, int required, int *comment );

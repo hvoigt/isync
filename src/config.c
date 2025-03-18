@@ -61,6 +61,32 @@ expand_strdup( const char *s, const conffile_t *cfile )
 	}
 }
 
+void
+conf_error( conffile_t *cfile, const char *fmt, ... )
+{
+	va_list va;
+
+	fprintf( stderr, "%s:%d: ", cfile->file, cfile->line );
+	va_start( va, fmt );
+	vfprintf( stderr, fmt, va );
+	va_end( va );
+	cfile->err = 1;
+}
+
+void
+conf_sys_error( conffile_t *cfile, const char *fmt, ... )
+{
+	va_list va;
+
+	int errno_bak = errno;
+	fprintf( stderr, "%s:%d: ", cfile->file, cfile->line );
+	errno = errno_bak;
+	va_start( va, fmt );
+	vsys_error( fmt, va );
+	va_end( va );
+	cfile->err = 1;
+}
+
 char *
 get_arg( conffile_t *cfile, int required, int *comment )
 {
@@ -75,10 +101,8 @@ get_arg( conffile_t *cfile, int required, int *comment )
 	if (!c || c == '#') {
 		if (comment && c)
 			*comment = 1;
-		if (required) {
-			error( "%s:%d: parameter missing\n", cfile->file, cfile->line );
-			cfile->err = 1;
-		}
+		if (required)
+			conf_error( cfile, "parameter missing\n" );
 		ret = NULL;
 	} else {
 		for (escaped = 0, quoted = 0, ret = t = p; c; c = *p) {
@@ -98,13 +122,11 @@ get_arg( conffile_t *cfile, int required, int *comment )
 		}
 		*t = 0;
 		if (escaped) {
-			error( "%s:%d: unterminated escape sequence\n", cfile->file, cfile->line );
-			cfile->err = 1;
+			conf_error( cfile, "unterminated escape sequence\n" );
 			ret = NULL;
 		}
 		if (quoted) {
-			error( "%s:%d: missing closing quote\n", cfile->file, cfile->line );
-			cfile->err = 1;
+			conf_error( cfile, "missing closing quote\n" );
 			ret = NULL;
 		}
 	}
@@ -124,9 +146,7 @@ parse_bool( conffile_t *cfile )
 	    strcasecmp( cfile->val, "false" ) &&
 	    strcasecmp( cfile->val, "off" ) &&
 	    strcmp( cfile->val, "0" )) {
-		error( "%s:%d: invalid boolean value '%s'\n",
-		       cfile->file, cfile->line, cfile->val );
-		cfile->err = 1;
+		conf_error( cfile, "invalid boolean value '%s'\n", cfile->val );
 	}
 	return 0;
 }
@@ -139,9 +159,7 @@ parse_int( conffile_t *cfile )
 
 	ret = strtol( cfile->val, &p, 10 );
 	if (*p) {
-		error( "%s:%d: invalid integer value '%s'\n",
-		       cfile->file, cfile->line, cfile->val );
-		cfile->err = 1;
+		conf_error( cfile, "invalid integer value '%s'\n", cfile->val );
 		return 0;
 	}
 	return ret;
@@ -161,9 +179,7 @@ parse_size( conffile_t *cfile )
 	if (*p == 'b' || *p == 'B')
 		p++;
 	if (*p) {
-		fprintf (stderr, "%s:%d: invalid size '%s'\n",
-		         cfile->file, cfile->line, cfile->val);
-		cfile->err = 1;
+		conf_error( cfile, "invalid size '%s'\n", cfile->val);
 		return 0;
 	}
 	return ret;
@@ -249,9 +265,7 @@ getopt_helper( conffile_t *cfile, int *cops, channel_conf_t *conf )
 			} else if (!strcasecmp( "None", arg ) || !strcasecmp( "Noop", arg )) {
 				conf->ops[F] |= XOP_TYPE_NOOP;
 			} else {
-				error( "%s:%d: invalid Sync arg '%s'\n",
-				       cfile->file, cfile->line, arg );
-				cfile->err = 1;
+				conf_error( cfile, "invalid Sync arg '%s'\n", arg );
 			}
 		} while ((arg = get_arg( cfile, ARG_OPTIONAL, NULL )));
 		conf->ops[F] |= XOP_HAVE_TYPE;
@@ -263,15 +277,12 @@ getopt_helper( conffile_t *cfile, int *cops, channel_conf_t *conf )
 		conf->max_messages = parse_int( cfile );
 	} else if (!strcasecmp( "ExpireSide", cfile->cmd )) {
 		arg = cfile->val;
-		if (!strcasecmp( "Far", arg )) {
+		if (!strcasecmp( "Far", arg ))
 			conf->expire_side = F;
-		} else if (!strcasecmp( "Near", arg )) {
+		else if (!strcasecmp( "Near", arg ))
 			conf->expire_side = N;
-		} else {
-			error( "%s:%d: invalid ExpireSide argument '%s'\n",
-			       cfile->file, cfile->line, arg );
-			cfile->err = 1;
-		}
+		else
+			conf_error( cfile, "invalid ExpireSide argument '%s'\n", arg );
 	} else if (!strcasecmp( "ExpireUnread", cfile->cmd )) {
 		conf->expire_unread = parse_bool( cfile );
 	} else {
@@ -295,9 +306,7 @@ getopt_helper( conffile_t *cfile, int *cops, channel_conf_t *conf )
 					} else if (!strcasecmp( "None", arg )) {
 						conf->ops[F] |= op * (XOP_EXPUNGE_NOOP / OP_EXPUNGE);
 					} else {
-						error( "%s:%d: invalid %s arg '%s'\n",
-						       cfile->file, cfile->line, boxOps[i].name, arg );
-						cfile->err = 1;
+						conf_error( cfile, "invalid %s arg '%s'\n", boxOps[i].name, arg );
 					}
 				} while ((arg = get_arg( cfile, ARG_OPTIONAL, NULL )));
 				conf->ops[F] |= op * (XOP_HAVE_EXPUNGE / OP_EXPUNGE);
@@ -314,10 +323,8 @@ getcline( conffile_t *cfile )
 {
 	char *arg;
 
-	if (cfile->rest && (arg = get_arg( cfile, ARG_OPTIONAL, NULL ))) {
-		error( "%s:%d: excess token '%s'\n", cfile->file, cfile->line, arg );
-		cfile->err = 1;
-	}
+	if (cfile->rest && (arg = get_arg( cfile, ARG_OPTIONAL, NULL )))
+		conf_error( cfile, "excess token '%s'\n", arg );
 	while (fgets( cfile->buf, cfile->bufl, cfile->fp )) {
 		cfile->line++;
 		cfile->rest = cfile->buf;
@@ -546,9 +553,7 @@ load_config( const char *where )
 					cfile.ms_warn = 1;
 				  linkst:
 					if (*cfile.val != ':' || !(p = strchr( cfile.val + 1, ':' ))) {
-						error( "%s:%d: malformed mailbox spec\n",
-						       cfile.file, cfile.line );
-						cfile.err = 1;
+						conf_error( &cfile, "malformed mailbox spec\n" );
 						continue;
 					}
 					*p = 0;
@@ -559,18 +564,14 @@ load_config( const char *where )
 						}
 					}
 					channel->stores[fn] = (void *)~0;
-					error( "%s:%d: unknown store '%s'\n",
-					       cfile.file, cfile.line, cfile.val + 1 );
-					cfile.err = 1;
+					conf_error( &cfile, "unknown store '%s'\n", cfile.val + 1 );
 					continue;
 				  stpcom:
 					if (*++p)
 						channel->boxes[fn] = nfstrdup( p );
 				} else if (!getopt_helper( &cfile, &cops, channel )) {
-					error( "%s:%d: keyword '%s' is not recognized in Channel sections\n",
-					       cfile.file, cfile.line, cfile.cmd );
+					conf_error( &cfile, "keyword '%s' is not recognized in Channel sections\n", cfile.cmd );
 					cfile.rest = NULL;
-					cfile.err = 1;
 				}
 			}
 			if (!channel->stores[F]) {
@@ -615,10 +616,8 @@ load_config( const char *where )
 					arg = cfile.val;
 					goto addone;
 				} else {
-					error( "%s:%d: keyword '%s' is not recognized in Group sections\n",
-					       cfile.file, cfile.line, cfile.cmd );
+					conf_error( &cfile, "keyword '%s' is not recognized in Group sections\n", cfile.cmd );
 					cfile.rest = NULL;
-					cfile.err = 1;
 				}
 			}
 			glob_ok = 0;
@@ -627,36 +626,26 @@ load_config( const char *where )
 			UseFSync = parse_bool( &cfile );
 		} else if (!strcasecmp( "FieldDelimiter", cfile.cmd )) {
 			if (strlen( cfile.val ) != 1) {
-				error( "%s:%d: Field delimiter must be exactly one character long\n", cfile.file, cfile.line );
-				cfile.err = 1;
+				conf_error( &cfile, "Field delimiter must be exactly one character long\n" );
 			} else {
 				FieldDelimiter = cfile.val[0];
-				if (!ispunct( FieldDelimiter )) {
-					error( "%s:%d: Field delimiter must be a punctuation character\n", cfile.file, cfile.line );
-					cfile.err = 1;
-				}
+				if (!ispunct( FieldDelimiter ))
+					conf_error( &cfile, "Field delimiter must be a punctuation character\n" );
 			}
 		} else if (!strcasecmp( "BufferLimit", cfile.cmd )) {
 			BufferLimit = parse_size( &cfile );
-			if (!BufferLimit) {
-				error( "%s:%d: BufferLimit cannot be zero\n", cfile.file, cfile.line );
-				cfile.err = 1;
-			}
+			if (!BufferLimit)
+				conf_error( &cfile, "BufferLimit cannot be zero\n" );
 		} else if (!getopt_helper( &cfile, &gcops, &global_conf )) {
-			error( "%s:%d: '%s' is not a recognized section-starting or global keyword\n",
-			       cfile.file, cfile.line, cfile.cmd );
-			cfile.err = 1;
+			conf_error( &cfile, "'%s' is not a recognized section-starting or global keyword\n", cfile.cmd );
 			cfile.rest = NULL;
 			while (getcline( &cfile ))
 				if (!cfile.cmd)
 					goto reloop;
 			break;
 		}
-		if (!glob_ok) {
-			error( "%s:%d: global options may not follow sections\n",
-			       cfile.file, cfile.line );
-			cfile.err = 1;
-		}
+		if (!glob_ok)
+			conf_error( &cfile, "global options may not follow sections\n" );
 	}
 	fclose (cfile.fp);
 	if (cfile.ms_warn)

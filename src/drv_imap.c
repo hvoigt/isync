@@ -3735,19 +3735,15 @@ imap_parse_store( conffile_t *cfg, store_conf_t **storep )
 #endif
 		} else if (!strcasecmp( "Port", cfg->cmd )) {
 			int port = parse_int( cfg );
-			if ((unsigned)port > 0xffff) {
-				error( "%s:%d: Invalid port number\n", cfg->file, cfg->line );
-				cfg->err = 1;
-			} else {
+			if ((unsigned)port > 0xffff)
+				conf_error( cfg, "Invalid port number\n" );
+			else
 				server->sconf.port = (ushort)port;
-			}
 		} else if (!strcasecmp( "Timeout", cfg->cmd )) {
 			server->sconf.timeout = parse_int( cfg ) * 1000;
 		} else if (!strcasecmp( "PipelineDepth", cfg->cmd )) {
-			if ((server->max_in_progress = parse_int( cfg )) < 1) {
-				error( "%s:%d: PipelineDepth must be at least 1\n", cfg->file, cfg->line );
-				cfg->err = 1;
-			}
+			if ((server->max_in_progress = parse_int( cfg )) < 1)
+				conf_error( cfg, "PipelineDepth must be at least 1\n" );
 		} else if (!strcasecmp( "DisableExtension", cfg->cmd ) ||
 		           !strcasecmp( "DisableExtensions", cfg->cmd )) {
 			arg = cfg->val;
@@ -3758,34 +3754,24 @@ imap_parse_store( conffile_t *cfg, store_conf_t **storep )
 						goto gotcap;
 					}
 				}
-				error( "%s:%d: Unrecognized IMAP extension '%s'\n", cfg->file, cfg->line, arg );
-				cfg->err = 1;
+				conf_error( cfg, "Unrecognized IMAP extension '%s'\n", arg );
 			  gotcap: ;
 			} while ((arg = get_arg( cfg, ARG_OPTIONAL, NULL )));
 #ifdef HAVE_LIBSSL
 		} else if (!strcasecmp( "CertificateFile", cfg->cmd )) {
 			server->sconf.cert_file = expand_strdup( cfg->val, cfg );
-			if (access( server->sconf.cert_file, R_OK )) {
-				sys_error( "%s:%d: CertificateFile '%s'",
-				           cfg->file, cfg->line, server->sconf.cert_file );
-				cfg->err = 1;
-			}
+			if (access( server->sconf.cert_file, R_OK ))
+				conf_sys_error( cfg, "CertificateFile '%s'", server->sconf.cert_file );
 		} else if (!strcasecmp( "SystemCertificates", cfg->cmd )) {
 			server->sconf.system_certs = parse_bool( cfg );
 		} else if (!strcasecmp( "ClientCertificate", cfg->cmd )) {
 			server->sconf.client_certfile = expand_strdup( cfg->val, cfg );
-			if (access( server->sconf.client_certfile, R_OK )) {
-				sys_error( "%s:%d: ClientCertificate '%s'",
-				           cfg->file, cfg->line, server->sconf.client_certfile );
-				cfg->err = 1;
-			}
+			if (access( server->sconf.client_certfile, R_OK ))
+				conf_sys_error( cfg, "ClientCertificate '%s'", server->sconf.client_certfile );
 		} else if (!strcasecmp( "ClientKey", cfg->cmd )) {
 			server->sconf.client_keyfile = expand_strdup( cfg->val, cfg );
-			if (access( server->sconf.client_keyfile, R_OK )) {
-				sys_error( "%s:%d: ClientKey '%s'",
-				           cfg->file, cfg->line, server->sconf.client_keyfile );
-				cfg->err = 1;
-			}
+			if (access( server->sconf.client_keyfile, R_OK ))
+				conf_sys_error( cfg, "ClientKey '%s'", server->sconf.client_keyfile );
 		} else if (!strcasecmp( "CipherString", cfg->cmd )) {
 			server->sconf.cipher_string = nfstrdup( cfg->val );
 		} else if (!strcasecmp( "TLSVersions", cfg->cmd )) {
@@ -3797,8 +3783,7 @@ imap_parse_store( conffile_t *cfg, store_conf_t **storep )
 				} else if (*arg == '-') {
 					and_mask = ~0;
 				} else {
-					error( "%s:%d: TLSVersions arguments must start with +/-\n", cfg->file, cfg->line );
-					cfg->err = 1;
+					conf_error( cfg, "TLSVersions arguments must start with +/-\n" );
 					continue;
 				}
 				arg++;
@@ -3811,8 +3796,7 @@ imap_parse_store( conffile_t *cfg, store_conf_t **storep )
 				} else if (!strcmp( "1.3", arg )) {
 					val = TLSv1_3;
 				} else {
-					error( "%s:%d: Unrecognized TLS version '%s'\n", cfg->file, cfg->line, arg );
-					cfg->err = 1;
+					conf_error( cfg, "Unrecognized TLS version '%s'\n", arg );
 					continue;
 				}
 				or_mask &= val;
@@ -3829,22 +3813,20 @@ imap_parse_store( conffile_t *cfg, store_conf_t **storep )
 			server->sconf.ssl_versions = 0;
 			arg = cfg->val;
 			do {
-				if (!strcasecmp( "SSLv2", arg )) {
+				if (!strcasecmp( "SSLv2", arg ))
 					warn( "Warning: SSLVersion SSLv2 is no longer supported\n" );
-				} else if (!strcasecmp( "SSLv3", arg )) {
+				else if (!strcasecmp( "SSLv3", arg ))
 					warn( "Warning: SSLVersion SSLv3 is no longer supported\n" );
-				} else if (!strcasecmp( "TLSv1", arg )) {
+				else if (!strcasecmp( "TLSv1", arg ))
 					server->sconf.ssl_versions |= TLSv1;
-				} else if (!strcasecmp( "TLSv1.1", arg )) {
+				else if (!strcasecmp( "TLSv1.1", arg ))
 					server->sconf.ssl_versions |= TLSv1_1;
-				} else if (!strcasecmp( "TLSv1.2", arg )) {
+				else if (!strcasecmp( "TLSv1.2", arg ))
 					server->sconf.ssl_versions |= TLSv1_2;
-				} else if (!strcasecmp( "TLSv1.3", arg )) {
+				else if (!strcasecmp( "TLSv1.3", arg ))
 					server->sconf.ssl_versions |= TLSv1_3;
-				} else {
-					error( "%s:%d: Unrecognized SSL version\n", cfg->file, cfg->line );
-					cfg->err = 1;
-				}
+				else
+					conf_error( cfg, "Unrecognized SSL version\n" );
 			} while ((arg = get_arg( cfg, ARG_OPTIONAL, NULL )));
 #else
 		} else if (!strcasecmp( "CertificateFile", cfg->cmd ) ||
@@ -3855,8 +3837,7 @@ imap_parse_store( conffile_t *cfg, store_conf_t **storep )
 		           !strcasecmp( "SSLVersion", cfg->cmd ) ||
 		           !strcasecmp( "SSLVersions", cfg->cmd ) ||
 		           !strcasecmp( "TLSVersions", cfg->cmd )) {
-			error( "Error: " EXE " built without OpenSSL; %s is not supported.\n", cfg->cmd );
-			cfg->err = 1;
+			conf_error( cfg, EXE " built without OpenSSL; %s is not supported.\n", cfg->cmd );
 #endif
 		} else if (!strcasecmp( "TLSType", cfg->cmd )) {
 			goto tlstype;
@@ -3877,12 +3858,10 @@ imap_parse_store( conffile_t *cfg, store_conf_t **storep )
 #else
 			} else if (!strcasecmp( "STARTTLS", cfg->val ) ||
 			           !strcasecmp( "IMAPS", cfg->val )) {
-				error( "Error: " EXE " built without OpenSSL; only TLSType None is supported.\n" );
-				cfg->err = 1;
+				conf_error( cfg, EXE " built without OpenSSL; only TLSType None is supported.\n" );
 #endif
 			} else {
-				error( "%s:%d: Invalid TLS type\n", cfg->file, cfg->line );
-				cfg->err = 1;
+				conf_error( cfg, "Invalid TLS type\n" );
 			}
 		} else if (!strcasecmp( "AuthMech", cfg->cmd ) ||
 		         !strcasecmp( "AuthMechs", cfg->cmd )) {
@@ -3900,8 +3879,7 @@ imap_parse_store( conffile_t *cfg, store_conf_t **storep )
 					if (srv->name && !strcmp( srv->name, cfg->val ))
 						goto gotsrv;
 				store->server = (void *)~0;
-				error( "%s:%d: unknown IMAP account '%s'\n", cfg->file, cfg->line, cfg->val );
-				cfg->err = 1;
+				conf_error( cfg, "unknown IMAP account '%s'\n", cfg->val );
 				continue;
 			  gotsrv:
 				store->server = srv;
@@ -3913,8 +3891,7 @@ imap_parse_store( conffile_t *cfg, store_conf_t **storep )
 				store->path = nfstrdup( cfg->val );
 			} else if (!strcasecmp( "PathDelimiter", cfg->cmd )) {
 				if (strlen( cfg->val ) != 1) {
-					error( "%s:%d: Path delimiter must be exactly one character long\n", cfg->file, cfg->line );
-					cfg->err = 1;
+					conf_error( cfg, "Path delimiter must be exactly one character long\n" );
 					continue;
 				}
 				store->delimiter = cfg->val[0];
@@ -3923,10 +3900,8 @@ imap_parse_store( conffile_t *cfg, store_conf_t **storep )
 			}
 			continue;
 		} else {
-			error( "%s:%d: keyword '%s' is not recognized in IMAPAccount sections\n",
-			       cfg->file, cfg->line, cfg->cmd );
+			conf_error( cfg, "keyword '%s' is not recognized in IMAPAccount sections\n", cfg->cmd );
 			cfg->rest = NULL;
-			cfg->err = 1;
 			continue;
 		}
 		acc_opt = 1;
@@ -3971,8 +3946,7 @@ imap_parse_store( conffile_t *cfg, store_conf_t **storep )
 #ifndef HAVE_LIBSASL
 		for (string_list_t *mech = server->auth_mechs; mech; mech = mech->next) {
 			if (strcmp( mech->string, "*" ) && strcasecmp( mech->string, "LOGIN" )) {
-				error( "Error: " EXE " built without LibSASL; only AuthMech LOGIN is supported.\n" );
-				cfg->err = 1;
+				conf_error( cfg, EXE " built without LibSASL; only AuthMech LOGIN is supported.\n" );
 				break;
 			}
 		}

@@ -1892,34 +1892,28 @@ maildir_parse_store( conffile_t *cfg, store_conf_t **storep )
 #ifdef USE_DB
 			store->alt_map = parse_bool( cfg );
 #else
-			if (parse_bool( cfg )) {
-				error( "Error: AltMap=true is not supported by this build.\n" );
-				cfg->err = 1;
-			}
+			if (parse_bool( cfg ))
+				conf_error( cfg, "AltMap=true is not supported by this build.\n" );
 #endif /* USE_DB */
 		} else if (!strcasecmp( "InfoDelimiter", cfg->cmd )) {
 			if (strlen( cfg->val ) != 1) {
-				error( "%s:%d: Info delimiter must be exactly one character long\n", cfg->file, cfg->line );
-				cfg->err = 1;
+				conf_error( cfg, "Info delimiter must be exactly one character long\n" );
 				continue;
 			}
 			store->info_delimiter = cfg->val[0];
 			if (!ispunct( store->info_delimiter )) {
-				error( "%s:%d: Info delimiter must be a punctuation character\n", cfg->file, cfg->line );
-				cfg->err = 1;
+				conf_error( cfg, "Info delimiter must be a punctuation character\n" );
 				continue;
 			}
 		} else if (!strcasecmp( "SubFolders", cfg->cmd )) {
-			if (!strcasecmp( "Verbatim", cfg->val )) {
+			if (!strcasecmp( "Verbatim", cfg->val ))
 				store->sub_style = SUB_VERBATIM;
-			} else if (!strcasecmp( "Maildir++", cfg->val )) {
+			else if (!strcasecmp( "Maildir++", cfg->val ))
 				store->sub_style = SUB_MAILDIRPP;
-			} else if (!strcasecmp( "Legacy", cfg->val )) {
+			else if (!strcasecmp( "Legacy", cfg->val ))
 				store->sub_style = SUB_LEGACY;
-			} else {
-				error( "%s:%d: Unrecognized SubFolders style\n", cfg->file, cfg->line );
-				cfg->err = 1;
-			}
+			else
+				conf_error( cfg, "Unrecognized SubFolders style\n" );
 		} else {
 			parse_generic_store( &store->gen, cfg, "MaildirStore" );
 		}
