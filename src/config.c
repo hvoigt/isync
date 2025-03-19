@@ -73,8 +73,8 @@ get_arg( conffile_t *cfile, int required, int *comment )
 	while ((c = *p) && isspace( (uchar)c ))
 		p++;
 	if (!c || c == '#') {
-		if (comment)
-			*comment = (c == '#');
+		if (comment && c)
+			*comment = 1;
 		if (required) {
 			error( "%s:%d: parameter missing\n", cfile->file, cfile->line );
 			cfile->err = 1;
@@ -313,7 +313,6 @@ int
 getcline( conffile_t *cfile )
 {
 	char *arg;
-	int comment;
 
 	if (cfile->rest && (arg = get_arg( cfile, ARG_OPTIONAL, NULL ))) {
 		error( "%s:%d: excess token '%s'\n", cfile->file, cfile->line, arg );
@@ -322,6 +321,7 @@ getcline( conffile_t *cfile )
 	while (fgets( cfile->buf, cfile->bufl, cfile->fp )) {
 		cfile->line++;
 		cfile->rest = cfile->buf;
+		int comment = 0;
 		if (!(cfile->cmd = get_arg( cfile, ARG_OPTIONAL, &comment ))) {
 			if (comment)
 				continue;
