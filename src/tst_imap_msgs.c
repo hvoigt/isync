@@ -90,8 +90,10 @@ verify( uint *in, const char *name )
 			break;
 		}
 	}
-	if (fails)
+	if (fails) {
 		dump_messages();
+		exit( 1 );
+	}
 }
 
 static void
