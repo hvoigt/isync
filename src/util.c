@@ -194,6 +194,8 @@ sys_error( const char *msg, ... )
 //   Same as %\\s, but non-ASCII characters are (hex-)escaped as well.
 // - %!&s
 //   Same as %!s, but linefeeds are also printed verbatim for legibility.
+// - %'s
+//   Print single-quote-escaped string literals. No outer quotes are added.
 
 // TODO: Trade off segments vs. buffer capacity dynamically.
 #define QPRINTF_SEGS 16
@@ -254,6 +256,9 @@ xvprintf_core( const char *fmt, va_list ap, printf_cb cb, void *cb_aux )
 					escaped = 3;
 					c = *++fmt;
 				}
+			} else if (c == '\'') {
+				escaped = 10;
+				c = *++fmt;
 			}
 			if (c == 'c') {
 				if (d + 1 > ed)
@@ -262,7 +267,25 @@ xvprintf_core( const char *fmt, va_list ap, printf_cb cb, void *cb_aux )
 				*d++ = (char)va_arg( ap, int );
 			} else if (c == 's') {
 				s = va_arg( ap, const char * );
-				if (escaped) {
+				if (escaped == 10) {
+					char *bd = d;
+					for (l = 0; l < maxlen && (c = *s); l++, s++) {
+						if (c == '\'') {
+							if (d + 3 >= ed)
+								oob();
+							*d++ = '\'';
+							*d++ = '\\';
+							*d++ = '\'';
+						} else {
+							if (d >= ed)
+								oob();
+						}
+						*d++ = c;
+					}
+					l = d - bd;
+					if (l)
+						ADD_SEG( bd, l );
+				} else if (escaped) {
 					char *bd = d;
 					for (l = 0; l < maxlen && (c = *s); l++, s++) {
 						if (c == '\\' || c == '"') {

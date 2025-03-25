@@ -38,6 +38,9 @@ main( void )
 	      "%!s", "foo \"\\\x1b\t\a\b\v\f\r\n" );
 	test( "double-quoted w/ escapes & linebreak", "foo \\\"\\\\\\x1b\\t\\a\\b\\v\\f\\r\\n\n",
 	      "%!&s", "foo \"\\\x1b\t\a\b\v\f\r\n" );
+	test( "shell-quoted string", "foo '\\'' bar", "%'s", "foo ' bar" );
+	test( "cut shell-quoted string", "foo '\\'' b", "%.*'s", 7, "foo ' bar" );
+	test( "uncut shell-quoted string", "foo '\\'' bar", "%.*'s", 20, "foo ' bar" );
 	test( "unsigned", "4123567890", "%u", 4123567890U );
 	test( "positive signed", "13", "%d", 13 );
 	test( "negative signed", "-17", "%d", -17 );
