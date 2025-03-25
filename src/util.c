@@ -348,6 +348,17 @@ xvasprintf( const char *fmt, va_list ap )
 	return out;
 }
 
+char *
+xasprintf( const char *fmt, ... )
+{
+	va_list va;
+
+	va_start( va, fmt );
+	char *out = xvasprintf( fmt, va );
+	va_end( va );
+	return out;
+}
+
 #ifndef HAVE_FWRITE_UNLOCKED
 # define flockfile(f)
 # define funlockfile(f)

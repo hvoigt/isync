@@ -33,6 +33,8 @@ bin_PROGRAMS = mbsync $(mdconvert_prog)
 # don't forget to update AC_CONFIG_FILES in configure.ac!
 man_MANS = mbsync.1 $(mdconvert_man)
 
+tst_xprintf_SOURCES = tst_xprintf.c util.c
+
 tst_imap_msgs_SOURCES = tst_imap_msgs.c imap_msgs.c util.c
 
 tst_imap_utf7_SOURCES = tst_imap_utf7.c imap_utf7.c util.c
@@ -40,7 +42,7 @@ tst_imap_utf7_SOURCES = tst_imap_utf7.c imap_utf7.c util.c
 tst_msg_cvt_SOURCES = tst_msg_cvt.c sync_msg_cvt.c util.c
 tst_msg_cvt_CFLAGS = -DQPRINTF_BUFF=10000
 
-check_PROGRAMS = tst_imap_msgs tst_imap_utf7 tst_msg_cvt
+check_PROGRAMS = tst_xprintf tst_imap_msgs tst_imap_utf7 tst_msg_cvt
 TESTS = $(check_PROGRAMS)
 
 tst_timers_SOURCES = tst_timers.c util.c

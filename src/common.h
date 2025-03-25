@@ -215,6 +215,7 @@ void ATTR_PRINTFLIKE(1, 2) sys_error( const char *, ... );
 void flushn( void );
 
 char *xvasprintf( const char *fmt, va_list ap );
+char *xasprintf( const char *fmt, ... );
 void xprintf( const char *fmt, ... );
 
 #if !defined(_POSIX_SYNCHRONIZED_IO) || _POSIX_SYNCHRONIZED_IO <= 0
