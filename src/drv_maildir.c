@@ -17,6 +17,7 @@
 #include <errno.h>
 #include <utime.h>
 
+#include <unistd.h>
 #if !defined(_POSIX_SYNCHRONIZED_IO) || _POSIX_SYNCHRONIZED_IO <= 0
 # define fdatasync fsync
 #endif
@@ -553,6 +554,7 @@ static int
 maildir_clear_tmp( char *buf, int bufsz, int bl )
 {
 	DIR *dirp;
+	int dirfd;
 	struct dirent *entry;
 	time_t now;
 	struct stat st;
@@ -563,19 +565,24 @@ maildir_clear_tmp( char *buf, int bufsz, int bl )
 		sys_error( "Maildir error: cannot list %s", buf );
 		return DRV_BOX_BAD;
 	}
+	dirfd = dirfd( dirp );
+	if (dirfd == -1) {
+		sys_error( "Maildir error: cannot get fd for %s", buf );
+		closedir( dirp );
+		return DRV_BOX_BAD;
+	}
 	time( &now );
 	while ((entry = readdir( dirp ))) {
-		nfsnprintf( buf + bl, bufsz - bl, "%s", entry->d_name );
-		if (stat( buf, &st )) {
+		// Skip "." and ".."
+		if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, ".."))
+			continue;
+		if (fstatat(dirfd, entry->d_name, &st, AT_SYMLINK_NOFOLLOW)) {
 			if (errno != ENOENT)
-				sys_error( "Maildir error: cannot access %s", buf );
+				sys_error( "Maildir error: cannot access %s/%s", buf, entry->d_name );
 		} else if (S_ISREG(st.st_mode) && now - st.st_ctime >= _24_HOURS) {
-			/* This should happen infrequently enough that it won't be
-			 * bothersome to the user to display when it occurs.
-			 */
-			notice( "Maildir notice: removing stale file %s\n", buf );
-			if (unlink( buf ) && errno != ENOENT)
-				sys_error( "Maildir error: cannot remove %s", buf );
+			notice( "Maildir notice: removing stale file %s/%s\n", buf, entry->d_name );
+			if (unlinkat(dirfd, entry->d_name, 0) && errno != ENOENT)
+				sys_error( "Maildir error: cannot remove %s/%s", buf, entry->d_name );
 		}
 	}
 	closedir( dirp );
