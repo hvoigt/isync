@@ -1777,17 +1777,21 @@ maildir_trash_msg( store_t *gctx, message_t *gmsg,
 		            subdirs[gmsg->status & M_RECENT], (long long)time( NULL ), Pid, ++MaildirCount, Hostname, s ? s : "" );
 		if (!rename( buf, nbuf ))
 			break;
-		if (!stat( buf, &st )) {
-			if ((ret = maildir_validate( ctx->trash, 1, ctx )) != DRV_OK) {
-				cb( ret, aux );
-				return;
-			}
-			if (!rename( buf, nbuf ))
-				break;
-			if (errno != ENOENT) {
-				sys_error( "Maildir error: cannot move %s to %s", buf, nbuf );
-				cb( DRV_BOX_BAD, aux );
-				return;
+		{
+			int fd = open(buf, O_RDONLY | O_NOFOLLOW);
+			if (fd != -1) {
+				close(fd);
+				if ((ret = maildir_validate( ctx->trash, 1, ctx )) != DRV_OK) {
+					cb( ret, aux );
+					return;
+				}
+				if (!rename( buf, nbuf ))
+					break;
+				if (errno != ENOENT) {
+					sys_error( "Maildir error: cannot move %s to %s", buf, nbuf );
+					cb( DRV_BOX_BAD, aux );
+					return;
+				}
 			}
 		}
 		if ((ret = maildir_again( ctx, msg, "Maildir error: cannot move %s to %s", buf, nbuf )) != DRV_OK) {
